@@ -48,10 +48,18 @@
         // MARK: - UIKeyInput
 
         public func insertText(_ text: String) {
+            // iOS software keyboards deliver the Return key as "\n" via
+            // UIKeyInput, but shells running their own line editor in raw
+            // mode (zsh/zle, bash/readline, fish) bind CR (\r) to
+            // accept-line. Translate the standalone newline so Enter
+            // executes the command; leave longer strings alone to keep IME
+            // commits and paste content intact.
+            let normalized = text == "\n" ? "\r" : text
+
             guard !hardwareKeyHandled else {
                 TerminalDebugLog.log(
                     .input,
-                    "insertText suppressed text=\(TerminalDebugLog.describe(text))"
+                    "insertText suppressed text=\(TerminalDebugLog.describe(normalized))"
                 )
                 hardwareKeyHandled = false
                 return
@@ -59,17 +67,17 @@
 
             #if !targetEnvironment(macCatalyst)
                 if inputHandler.hasMarkedText {
-                    inputHandler.insertText(text)
+                    inputHandler.insertText(normalized)
                     return
                 }
 
                 if stickyModifiers.hasActiveModifiers {
-                    _ = handleStickyTextInput(text)
+                    _ = handleStickyTextInput(normalized)
                     return
                 }
             #endif
 
-            inputHandler.insertText(text)
+            inputHandler.insertText(normalized)
         }
 
         public func deleteBackward() {
@@ -145,9 +153,34 @@
 
         // MARK: - UITextInput Selection
 
+        /// Whether we should expose a virtual non-empty document to UIKit.
+        /// The on-screen keyboard's auto-repeat for `deleteBackward` (and
+        /// arrow-key navigation in some flows) only kicks in when iOS
+        /// believes the cursor sits past the document start. A terminal
+        /// that always reports `documentLength = 0` looks "already at
+        /// beginning, nothing to delete" and never receives the second
+        /// soft-key fire. While no IME composition is active we therefore
+        /// pretend the document is 1 char long with the caret at the end.
+        /// During IME composition we defer to the real marked-text state
+        /// so candidate selection / preedit positioning stays correct.
+        private var exposesVirtualDocument: Bool {
+            !inputHandler.hasMarkedText
+        }
+
         public var selectedTextRange: UITextRange? {
-            get { inputHandler.selectedTextRange() }
-            set { inputHandler.setSelectedTextRange(newValue) }
+            get {
+                if exposesVirtualDocument {
+                    return TerminalTextRange(location: 1, length: 0)
+                }
+                return inputHandler.selectedTextRange()
+            }
+            set {
+                // While the virtual doc is exposed the caret is pinned —
+                // ignore writes so UIKit can't reset us to (0, 0) between
+                // auto-repeat fires.
+                guard !exposesVirtualDocument else { return }
+                inputHandler.setSelectedTextRange(newValue)
+            }
         }
 
         // MARK: - UITextInput Positions
@@ -157,7 +190,10 @@
         }
 
         public var endOfDocument: UITextPosition {
-            TerminalTextPosition(inputHandler.documentLength)
+            if exposesVirtualDocument {
+                return TerminalTextPosition(1)
+            }
+            return TerminalTextPosition(inputHandler.documentLength)
         }
 
         public func textRange(
@@ -177,7 +213,8 @@
         ) -> UITextPosition? {
             guard let pos = position as? TerminalTextPosition else { return nil }
             let newIndex = pos.index + offset
-            guard newIndex >= 0, newIndex <= inputHandler.documentLength else { return nil }
+            let upperBound = exposesVirtualDocument ? 1 : inputHandler.documentLength
+            guard newIndex >= 0, newIndex <= upperBound else { return nil }
             return TerminalTextPosition(newIndex)
         }
 
@@ -218,23 +255,33 @@
 
         public func text(in range: UITextRange) -> String? {
             guard let range = range as? TerminalTextRange else { return nil }
+            if exposesVirtualDocument {
+                // iOS sometimes pre-fetches the char behind the cursor
+                // before firing the next auto-repeat. Hand it a single
+                // placeholder space so the request resolves to non-nil and
+                // the keyboard keeps the repeat loop alive. Returning the
+                // empty string here works too but feels less safe across
+                // UIKit versions.
+                return range.length == 0 ? "" : " "
+            }
             return inputHandler.text(in: range)
         }
 
         public func replace(_: UITextRange, withText text: String) {
+            let normalized = text == "\n" ? "\r" : text
             #if !targetEnvironment(macCatalyst)
                 if inputHandler.hasMarkedText {
-                    inputHandler.insertText(text)
+                    inputHandler.insertText(normalized)
                     return
                 }
 
                 if stickyModifiers.hasActiveModifiers {
-                    _ = handleStickyTextInput(text)
+                    _ = handleStickyTextInput(normalized)
                     return
                 }
             #endif
 
-            inputHandler.insertText(text)
+            inputHandler.insertText(normalized)
         }
 
         // MARK: - UITextInput Delegate

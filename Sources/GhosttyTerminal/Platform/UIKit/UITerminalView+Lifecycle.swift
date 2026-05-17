@@ -113,16 +113,29 @@
         }
 
         @discardableResult
-        override func becomeFirstResponder() -> Bool {
+        open override func becomeFirstResponder() -> Bool {
             let result = super.becomeFirstResponder()
             core.setFocus(true)
             return result
         }
 
         @discardableResult
-        override func resignFirstResponder() -> Bool {
+        open override func resignFirstResponder() -> Bool {
             let result = super.resignFirstResponder()
             core.setFocus(false)
+            #if !targetEnvironment(macCatalyst)
+                if result {
+                    // Another responder (e.g. a sibling SwiftUI TextField) just took
+                    // over the keyboard. iOS hands the keyboard to the new FR without
+                    // firing keyboardDidHide, so without this reset
+                    // softwareKeyboardVisible would stay `true` — and the next tap on
+                    // the terminal would route into the "dismiss-on-touchEnd" branch
+                    // of touchesBegan instead of calling becomeFirstResponder,
+                    // leaving the terminal unable to reclaim focus.
+                    softwareKeyboardVisible = false
+                    pendingKeyboardDismissOnTouchEnd = false
+                }
+            #endif
             return result
         }
     }

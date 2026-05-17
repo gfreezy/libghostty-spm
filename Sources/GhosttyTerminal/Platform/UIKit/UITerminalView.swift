@@ -68,7 +68,7 @@
             true
         }
 
-        override public var canBecomeFirstResponder: Bool {
+        open override var canBecomeFirstResponder: Bool {
             true
         }
 

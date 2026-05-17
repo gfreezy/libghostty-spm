@@ -10,7 +10,7 @@
     import UIKit
 
     extension UITerminalView {
-        override public func touchesBegan(
+        open override func touchesBegan(
             _ touches: Set<UITouch>,
             with event: UIEvent?
         ) {
@@ -33,7 +33,7 @@
             #endif
         }
 
-        override public func touchesMoved(
+        open override func touchesMoved(
             _ touches: Set<UITouch>,
             with event: UIEvent?
         ) {
@@ -45,7 +45,7 @@
             super.touchesMoved(touches, with: event)
         }
 
-        override public func touchesEnded(
+        open override func touchesEnded(
             _ touches: Set<UITouch>,
             with event: UIEvent?
         ) {
@@ -64,7 +64,7 @@
             super.touchesEnded(touches, with: event)
         }
 
-        override public func touchesCancelled(
+        open override func touchesCancelled(
             _ touches: Set<UITouch>,
             with event: UIEvent?
         ) {
