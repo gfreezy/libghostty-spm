@@ -36,6 +36,10 @@
             var softwareKeyboardVisible = false
             var pendingKeyboardDismissOnTouchEnd = false
             var touchDidScrollDuringCurrentTouch = false
+            /// iOS edit menu used to surface Copy / Select All / Paste at
+            /// the end of a long-press selection. Stored on the class so
+            /// the selection extension can install and present it.
+            var editMenuInteraction: UIEditMenuInteraction?
         #endif
 
         #if !targetEnvironment(macCatalyst)

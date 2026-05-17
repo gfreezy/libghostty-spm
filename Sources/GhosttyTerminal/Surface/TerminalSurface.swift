@@ -218,6 +218,16 @@ public final class TerminalSurface {
         return ghostty_surface_mouse_captured(s)
     }
 
+    // MARK: - Selection
+
+    /// Whether libghostty currently holds a non-empty selection. Drives
+    /// the iOS edit menu's Copy availability and the AppKit `copy:`
+    /// validator's enable state.
+    var hasSelection: Bool {
+        guard let s = surface else { return false }
+        return ghostty_surface_has_selection(s)
+    }
+
     // MARK: - Lifecycle
 
     func free() {

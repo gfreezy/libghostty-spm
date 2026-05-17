@@ -195,6 +195,7 @@
 
                 currentFontSize = configuration.fontSize ?? 14
                 setupPinchZoomGesture()
+                setupSelectionGesture()
             }
         #endif
 
