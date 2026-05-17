@@ -8,7 +8,7 @@
     import UIKit
 
     extension UITerminalView {
-        override public var inputAccessoryView: UIView? {
+        open override var inputAccessoryView: UIView? {
             terminalInputAccessory
         }
 

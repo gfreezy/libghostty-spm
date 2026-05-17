@@ -10,7 +10,7 @@
     import UIKit
 
     @MainActor
-    public final class UITerminalView: UIView {
+    open class UITerminalView: UIView {
         let core = TerminalSurfaceCoordinator()
         var momentumDisplayLink: CADisplayLink?
         var momentumVelocity: CGPoint = .zero
@@ -78,7 +78,7 @@
         }
 
         @available(*, unavailable)
-        required init?(coder _: NSCoder) {
+        public required init?(coder _: NSCoder) {
             fatalError("init(coder:) has not been implemented")
         }
 
