@@ -15,7 +15,11 @@
         private(set) var alt: Activation = .inactive
         private(set) var command: Activation = .inactive
 
+        /// Internal accessory refresh callback. Hosts that provide their own
+        /// modifier UI subscribe through `hostOnChange` so lazy creation of the
+        /// bundled accessory cannot steal their notification path.
         var onChange: (() -> Void)?
+        var hostOnChange: (() -> Void)?
 
         private var lastCtrlTap: Date = .distantPast
         private var lastAltTap: Date = .distantPast
@@ -34,7 +38,7 @@
                 command = nextActivation(command, lastTap: lastCommandTap)
                 lastCommandTap = Date()
             }
-            onChange?()
+            notifyChange()
         }
 
         func consumeForNextKey() -> TerminalInputModifiers {
@@ -45,7 +49,7 @@
             if ctrl == .armed { ctrl = .inactive }
             if alt == .armed { alt = .inactive }
             if command == .armed { command = .inactive }
-            onChange?()
+            notifyChange()
             return mods
         }
 
@@ -58,7 +62,12 @@
             ctrl = .inactive
             alt = .inactive
             command = .inactive
+            notifyChange()
+        }
+
+        private func notifyChange() {
             onChange?()
+            hostOnChange?()
         }
 
         private func nextActivation(

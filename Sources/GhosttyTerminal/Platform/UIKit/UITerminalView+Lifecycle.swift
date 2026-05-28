@@ -17,8 +17,18 @@
             )
             updateDisplayScale()
             if window != nil {
-                core.rebuildIfReady()
+                // UIKit/SwiftUI can temporarily detach and later reattach a
+                // terminal view while switching tabs. Rebuilding on every
+                // reattach discards Ghostty's screen state; keep an existing
+                // surface alive and just resync metrics when it comes back.
+                if surface == nil {
+                    core.rebuildIfReady()
+                } else {
+                    core.setDisplayVisible(true)
+                    core.synchronizeMetrics()
+                }
                 updateColorScheme()
+                windowAttachmentHandler?(true)
                 core.startDisplayLink()
                 // Defer sublayer frame and metrics sync to the next runloop
                 // so that AutoLayout has resolved final bounds.
@@ -28,8 +38,10 @@
                     core.synchronizeMetrics()
                 }
             } else {
+                windowAttachmentHandler?(false)
                 core.stopDisplayLink()
-                core.freeSurface()
+                core.setFocus(false)
+                core.setDisplayVisible(false)
             }
         }
 
@@ -113,14 +125,14 @@
         }
 
         @discardableResult
-        open override func becomeFirstResponder() -> Bool {
+        override func becomeFirstResponder() -> Bool {
             let result = super.becomeFirstResponder()
             core.setFocus(true)
             return result
         }
 
         @discardableResult
-        open override func resignFirstResponder() -> Bool {
+        override func resignFirstResponder() -> Bool {
             let result = super.resignFirstResponder()
             core.setFocus(false)
             #if !targetEnvironment(macCatalyst)
@@ -128,12 +140,9 @@
                     // Another responder (e.g. a sibling SwiftUI TextField) just took
                     // over the keyboard. iOS hands the keyboard to the new FR without
                     // firing keyboardDidHide, so without this reset
-                    // softwareKeyboardVisible would stay `true` — and the next tap on
-                    // the terminal would route into the "dismiss-on-touchEnd" branch
-                    // of touchesBegan instead of calling becomeFirstResponder,
-                    // leaving the terminal unable to reclaim focus.
+                    // softwareKeyboardVisible would stay `true` and stale state would
+                    // confuse the focus-tap toggle.
                     softwareKeyboardVisible = false
-                    pendingKeyboardDismissOnTouchEnd = false
                 }
             #endif
             return result

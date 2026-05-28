@@ -50,7 +50,7 @@
 
             let filteredModifierFlags = filteredModifierFlags(for: key)
             let isCommandModified = filteredModifierFlags.contains(.command)
-            let mods = TerminalInputModifiers(from: filteredModifierFlags)
+            var mods = TerminalInputModifiers(from: filteredModifierFlags)
             let keyboardZoomDirection = commandZoomDirection(
                 for: key,
                 action: action,
@@ -62,6 +62,12 @@
             {
                 hardwareKeyHandled = true
             }
+
+            #if !targetEnvironment(macCatalyst)
+                if shouldApplyStickyModifiers(to: key, action: action, isCommandModified: isCommandModified) {
+                    mods.formUnion(stickyModifiers.consumeForNextKey())
+                }
+            #endif
 
             let delivery = TerminalHardwareKeyRouter.routeUIKit(
                 usage: UInt16(key.keyCode.rawValue),
@@ -189,6 +195,26 @@
             }
             return flags
         }
+
+        #if !targetEnvironment(macCatalyst)
+            private func shouldApplyStickyModifiers(
+                to key: UIKey,
+                action: ghostty_input_action_e,
+                isCommandModified: Bool
+            ) -> Bool {
+                guard action == GHOSTTY_ACTION_PRESS || action == GHOSTTY_ACTION_REPEAT else {
+                    return false
+                }
+                guard stickyModifiers.hasActiveModifiers else { return false }
+                guard !inputHandler.hasMarkedText else { return false }
+                guard !isCommandModified else { return false }
+                return !isModifierKey(usage: UInt16(key.keyCode.rawValue))
+            }
+
+            private func isModifierKey(usage: UInt16) -> Bool {
+                (0xE0...0xE7).contains(usage)
+            }
+        #endif
 
         private func commandZoomDirection(
             for key: UIKey,

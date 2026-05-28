@@ -75,11 +75,11 @@
         }
 
         /// Subscribe to sticky-state changes. Called on every transition
-        /// (toggle / consume / reset). Replaces any prior closure — pass
+        /// (toggle / consume / reset). Replaces any prior host closure — pass
         /// `nil` to detach. Useful for host UIs that mirror the activation
         /// in their own chip pill.
         func setStickyModifierChangeHandler(_ handler: (() -> Void)?) {
-            stickyModifiers.onChange = handler
+            stickyModifiers.hostOnChange = handler
         }
 
         // MARK: - Internal mappers

@@ -18,18 +18,10 @@
                 if handleIndirectPointerTouches(touches, phase: .began, event: event) {
                     return
                 }
-            #endif
-            super.touchesBegan(touches, with: event)
-            #if targetEnvironment(macCatalyst)
+                super.touchesBegan(touches, with: event)
                 becomeFirstResponder()
             #else
-                pendingKeyboardDismissOnTouchEnd = false
-                touchDidScrollDuringCurrentTouch = false
-                if softwareKeyboardVisible {
-                    pendingKeyboardDismissOnTouchEnd = true
-                } else {
-                    becomeFirstResponder()
-                }
+                super.touchesBegan(touches, with: event)
             #endif
         }
 
@@ -54,13 +46,6 @@
                     return
                 }
             #endif
-            #if !targetEnvironment(macCatalyst)
-                if pendingKeyboardDismissOnTouchEnd, !touchDidScrollDuringCurrentTouch {
-                    resignFirstResponder()
-                }
-                pendingKeyboardDismissOnTouchEnd = false
-                touchDidScrollDuringCurrentTouch = false
-            #endif
             super.touchesEnded(touches, with: event)
         }
 
@@ -72,10 +57,6 @@
                 if handleIndirectPointerTouches(touches, phase: .cancelled, event: event) {
                     return
                 }
-            #endif
-            #if !targetEnvironment(macCatalyst)
-                pendingKeyboardDismissOnTouchEnd = false
-                touchDidScrollDuringCurrentTouch = false
             #endif
             super.touchesCancelled(touches, with: event)
         }
@@ -186,16 +167,39 @@
             }
         #else
             func setupTouchScrollInput() {
-                let gesture = UIPanGestureRecognizer(
+                let pan = UIPanGestureRecognizer(
                     target: self,
                     action: #selector(handleTouchScrollGesture(_:))
                 )
-                gesture.maximumNumberOfTouches = 1
-                addGestureRecognizer(gesture)
+                pan.maximumNumberOfTouches = 1
+                addGestureRecognizer(pan)
 
                 currentFontSize = configuration.fontSize ?? 14
                 setupPinchZoomGesture()
                 setupSelectionGesture()
+
+                // Focus tap: when libghostty has an active selection,
+                // any tap clears it (no focus change). Otherwise the
+                // tap toggles the soft keyboard.
+                let focusTap = UITapGestureRecognizer(
+                    target: self,
+                    action: #selector(handleFocusTap(_:))
+                )
+                focusTap.cancelsTouchesInView = false
+                addGestureRecognizer(focusTap)
+            }
+
+            @objc func handleFocusTap(_ gesture: UITapGestureRecognizer) {
+                let location = gesture.location(in: self)
+                if surface?.hasSelection == true {
+                    clearLibghosttySelection(at: location)
+                    return
+                }
+                if softwareKeyboardVisible {
+                    resignFirstResponder()
+                } else {
+                    becomeFirstResponder()
+                }
             }
         #endif
 
@@ -204,9 +208,6 @@
         ) {
             switch gesture.state {
             case .began:
-                #if !targetEnvironment(macCatalyst)
-                    touchDidScrollDuringCurrentTouch = true
-                #endif
                 TerminalDebugLog.log(.input, "touch scroll began")
                 stopMomentumScrolling()
 
@@ -302,4 +303,5 @@
             momentumVelocity = .zero
         }
     }
+
 #endif

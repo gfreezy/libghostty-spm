@@ -11,6 +11,8 @@ import GhosttyKit
 public final class InMemoryTerminalSession: @unchecked Sendable {
     private let lock = NSLock()
     private var surface: ghostty_surface_t?
+    private var pendingOutput = Data()
+    private let maxPendingOutputBytes = 2 * 1024 * 1024
     private var lastResize: InMemoryTerminalViewport?
     private let writeHandler: @Sendable (Data) -> Void
     private let resizeHandler: @Sendable (InMemoryTerminalViewport) -> Void
@@ -33,6 +35,18 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
             .lifecycle,
             "in-memory session surface=\(surface == nil ? "nil" : "set")"
         )
+        guard let surface, !pendingOutput.isEmpty else { return }
+        TerminalDebugLog.log(
+            .output,
+            "terminal <- pending host \(TerminalDebugLog.describe(pendingOutput))"
+        )
+        pendingOutput.withUnsafeBytes { buffer in
+            guard let ptr = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else {
+                return
+            }
+            ghostty_surface_write_buffer(surface, ptr, UInt(buffer.count))
+        }
+        pendingOutput.removeAll(keepingCapacity: true)
     }
 
     func clearSurface(ifMatches expectedSurface: ghostty_surface_t?) {
@@ -127,9 +141,13 @@ public final class InMemoryTerminalSession: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard let surface else {
+            pendingOutput.append(data)
+            if pendingOutput.count > maxPendingOutputBytes {
+                pendingOutput.removeFirst(pendingOutput.count - maxPendingOutputBytes)
+            }
             TerminalDebugLog.log(
                 .output,
-                "terminal <- host dropped \(TerminalDebugLog.describe(data))"
+                "terminal <- host pending \(TerminalDebugLog.describe(data))"
             )
             return
         }

@@ -34,12 +34,13 @@
             lazy var terminalInputAccessory = TerminalInputAccessoryView(terminalView: self)
             let stickyModifiers = TerminalStickyModifierState()
             var softwareKeyboardVisible = false
-            var pendingKeyboardDismissOnTouchEnd = false
-            var touchDidScrollDuringCurrentTouch = false
             /// iOS edit menu used to surface Copy / Select All / Paste at
             /// the end of a long-press selection. Stored on the class so
             /// the selection extension can install and present it.
             var editMenuInteraction: UIEditMenuInteraction?
+            /// Prevents `handleSelectionLongPress` from re-running when
+            /// IME composition is active — see TerminalTextInputHandler.
+            var longPressSuppressedForIME = false
         #endif
 
         #if !targetEnvironment(macCatalyst)
@@ -71,6 +72,8 @@
         public var hasText: Bool {
             true
         }
+
+        public var windowAttachmentHandler: ((Bool) -> Void)?
 
         open override var canBecomeFirstResponder: Bool {
             true

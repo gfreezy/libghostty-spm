@@ -2,47 +2,36 @@
 //  UITerminalView+Selection.swift
 //  libghostty-spm
 //
-//  Hold-and-drag selection + iOS edit menu (Copy / Select All / Paste).
-//  AppKit gets selection for free from mouse drag; on iOS the same C
-//  API (`ghostty_surface_mouse_*`) needs a gesture to feed it touches.
+//  Minimal iOS selection workflow:
+//
+//  - Long-press → libghostty selection (PRESS / POS / RELEASE on the
+//    mouse API). On release the edit menu pops up at the touch point.
+//  - Any tap while libghostty has a selection → synthetic left click
+//    to clear it (no inside/outside distinction; without handles there
+//    is no robust way to draw or hit-test a selection rect from the
+//    Swift side, and libghostty offers no geometry for the live
+//    selection beyond `tl_px_*` which is in baseline-shifted display
+//    points — not useful for hit testing).
+//  - Tap with no libghostty selection → toggle keyboard focus.
+//
+//  The non-Catalyst-only `@preconcurrency UIEditMenuInteractionDelegate`
+//  conformance is the same shape AppKit's NSTextInputClient uses for
+//  IME — UIKit only invokes these on main even though the header isn't
+//  annotated.
 //
 
 #if canImport(UIKit) && !targetEnvironment(macCatalyst)
     import GhosttyKit
     import UIKit
 
-    // UIEditMenuInteractionDelegate isn't @MainActor-annotated in UIKit
-    // headers, but UITerminalView is — UIKit only calls these on main
-    // anyway, so flag the conformance `@preconcurrency` to defer the
-    // strict-isolation check at the protocol witness boundary.
     extension UITerminalView: @preconcurrency UIEditMenuInteractionDelegate {
         func setupSelectionGesture() {
-            // Long-press-and-drag drives a libghostty selection by
-            // synthesizing mouse PRESS / MOVE / RELEASE at the touch
-            // point. Coexists with the scroll pan because pan needs
-            // movement to recognize (~10pt) while long-press needs
-            // duration without movement (~0.5s) — first recognizer to
-            // fire claims the touch, so a quick drag still scrolls.
             let longPress = UILongPressGestureRecognizer(
                 target: self,
                 action: #selector(handleSelectionLongPress(_:))
             )
             longPress.minimumPressDuration = 0.5
             addGestureRecognizer(longPress)
-
-            // A plain tap with an existing selection clears it via a
-            // synthetic left click — matches every other terminal app
-            // and prevents stale highlights from sticking around after
-            // the user moves on.
-            let tap = UITapGestureRecognizer(
-                target: self,
-                action: #selector(handleSelectionTap(_:))
-            )
-            // Keep the touch flowing to `touchesBegan` so the tap-to-
-            // focus / keyboard-raise logic in UITerminalView+Interaction
-            // still runs.
-            tap.cancelsTouchesInView = false
-            addGestureRecognizer(tap)
 
             let interaction = UIEditMenuInteraction(delegate: self)
             addInteraction(interaction)
@@ -56,6 +45,15 @@
 
             switch gesture.state {
             case .began:
+                // IME composition holds a marked-text range. Letting the
+                // selection drag run here would force libghostty to drop
+                // composition mid-stroke. Skip the gesture instead.
+                if inputHandler.hasMarkedText {
+                    longPressSuppressedForIME = true
+                    return
+                }
+                longPressSuppressedForIME = false
+
                 surface.sendMousePos(
                     x: Double(location.x),
                     y: Double(location.y),
@@ -68,6 +66,7 @@
                 )
 
             case .changed:
+                guard !longPressSuppressedForIME else { return }
                 surface.sendMousePos(
                     x: Double(location.x),
                     y: Double(location.y),
@@ -75,6 +74,10 @@
                 )
 
             case .ended, .cancelled, .failed:
+                guard !longPressSuppressedForIME else {
+                    longPressSuppressedForIME = false
+                    return
+                }
                 surface.sendMousePos(
                     x: Double(location.x),
                     y: Double(location.y),
@@ -85,11 +88,7 @@
                     button: GHOSTTY_MOUSE_LEFT,
                     mods: mods
                 )
-                // Only present the menu on a clean end; .cancelled
-                // typically means the system pulled the touch out from
-                // under us (e.g. responder change), and popping a menu
-                // there would feel like a glitch.
-                if gesture.state == .ended {
+                if gesture.state == .ended, surface.hasSelection {
                     presentEditMenu(at: location)
                 }
 
@@ -98,14 +97,13 @@
             }
         }
 
-        @objc func handleSelectionTap(_ gesture: UITapGestureRecognizer) {
+        /// Send a synthetic left click to libghostty so it drops any
+        /// active selection. A press+release at the same point without
+        /// drag is libghostty's standard deselect.
+        func clearLibghosttySelection(at point: CGPoint) {
             guard let surface, surface.hasSelection else { return }
-            // libghostty treats a left click without drag as "clear
-            // selection (and move the mouse-tracking cursor)" — same
-            // behavior as a desktop terminal.
-            let p = gesture.location(in: self)
             let mods = ghostty_input_mods_e(rawValue: 0)
-            surface.sendMousePos(x: Double(p.x), y: Double(p.y), mods: mods)
+            surface.sendMousePos(x: Double(point.x), y: Double(point.y), mods: mods)
             surface.sendMouseButton(
                 state: GHOSTTY_MOUSE_PRESS,
                 button: GHOSTTY_MOUSE_LEFT,

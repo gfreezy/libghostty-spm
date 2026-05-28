@@ -48,36 +48,33 @@
         // MARK: - UIKeyInput
 
         public func insertText(_ text: String) {
-            // iOS software keyboards deliver the Return key as "\n" via
-            // UIKeyInput, but shells running their own line editor in raw
-            // mode (zsh/zle, bash/readline, fish) bind CR (\r) to
-            // accept-line. Translate the standalone newline so Enter
-            // executes the command; leave longer strings alone to keep IME
-            // commits and paste content intact.
-            let normalized = text == "\n" ? "\r" : text
-
             guard !hardwareKeyHandled else {
                 TerminalDebugLog.log(
                     .input,
-                    "insertText suppressed text=\(TerminalDebugLog.describe(normalized))"
+                    "insertText suppressed text=\(TerminalDebugLog.describe(text))"
                 )
                 hardwareKeyHandled = false
                 return
             }
 
+            if text == "\n" || text == "\r" {
+                sendSoftwareReturn()
+                return
+            }
+
             #if !targetEnvironment(macCatalyst)
                 if inputHandler.hasMarkedText {
-                    inputHandler.insertText(normalized)
+                    inputHandler.insertText(text)
                     return
                 }
 
                 if stickyModifiers.hasActiveModifiers {
-                    _ = handleStickyTextInput(normalized)
+                    _ = handleStickyTextInput(text)
                     return
                 }
             #endif
 
-            inputHandler.insertText(normalized)
+            inputHandler.insertText(text)
         }
 
         public func deleteBackward() {
@@ -268,20 +265,40 @@
         }
 
         public func replace(_: UITextRange, withText text: String) {
-            let normalized = text == "\n" ? "\r" : text
+            if text == "\n" || text == "\r" {
+                sendSoftwareReturn()
+                return
+            }
+
             #if !targetEnvironment(macCatalyst)
                 if inputHandler.hasMarkedText {
-                    inputHandler.insertText(normalized)
+                    inputHandler.insertText(text)
                     return
                 }
 
                 if stickyModifiers.hasActiveModifiers {
-                    _ = handleStickyTextInput(normalized)
+                    _ = handleStickyTextInput(text)
                     return
                 }
             #endif
 
-            inputHandler.insertText(normalized)
+            inputHandler.insertText(text)
+        }
+
+        private func sendSoftwareReturn() {
+            #if !targetEnvironment(macCatalyst)
+                let mods = stickyModifiers.consumeForNextKey()
+                sendSyntheticKey(usage: 0x28, additionalMods: mods)
+            #else
+                var keyEvent = ghostty_input_key_s()
+                keyEvent.action = GHOSTTY_ACTION_PRESS
+                keyEvent.mods = ghostty_input_mods_e(rawValue: 0)
+                keyEvent.keycode = TerminalHardwareKeyRouter.appKitKeyCodeForUIKit(
+                    usage: 0x28
+                )
+                keyEvent.composing = false
+                surface?.sendKeyEvent(keyEvent)
+            #endif
         }
 
         // MARK: - UITextInput Delegate

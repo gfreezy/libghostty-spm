@@ -22,6 +22,12 @@ struct TerminalHardwareKeyRouterTests {
         )
         #expect(
             TerminalHardwareKeyRouter.routeUIKit(
+                usage: 0x28,
+                backend: .inMemory(session)
+            ) == .data(Data([0x0D]))
+        )
+        #expect(
+            TerminalHardwareKeyRouter.routeUIKit(
                 usage: 0x2A,
                 backend: .inMemory(session)
             ) == .data(Data([0x7F]))
@@ -98,6 +104,12 @@ struct TerminalHardwareKeyRouterTests {
                 keyCode: 0x7B,
                 backend: .inMemory(session)
             ) == .data(Data("\u{1B}[D".utf8))
+        )
+        #expect(
+            TerminalHardwareKeyRouter.routeAppKit(
+                keyCode: 0x24,
+                backend: .inMemory(session)
+            ) == .data(Data([0x0D]))
         )
         #expect(
             TerminalHardwareKeyRouter.routeAppKit(
