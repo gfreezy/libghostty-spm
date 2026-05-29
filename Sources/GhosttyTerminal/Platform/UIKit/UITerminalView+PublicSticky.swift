@@ -32,6 +32,7 @@
         case ctrl
         case alt
         case command
+        case shift
     }
 
     /// Public mirror of `TerminalStickyModifierState.Activation`.
@@ -61,6 +62,7 @@
             case .ctrl: return publicActivation(stickyModifiers.ctrl)
             case .alt: return publicActivation(stickyModifiers.alt)
             case .command: return publicActivation(stickyModifiers.command)
+            case .shift: return publicActivation(stickyModifiers.shift)
             }
         }
 
@@ -91,6 +93,7 @@
             case .ctrl: return .ctrl
             case .alt: return .alt
             case .command: return .command
+            case .shift: return .shift
             }
         }
 
